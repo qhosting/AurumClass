@@ -1,0 +1,21 @@
+{
+  "name": "AurumClass Pro",
+  "short_name": "AurumClass",
+  "description": "Sistema de gestión educativa integral",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=AurumClass&backgroundColor=2563eb",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=AurumClass&backgroundColor=2563eb",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
