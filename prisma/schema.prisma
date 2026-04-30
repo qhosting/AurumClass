@@ -34,6 +34,8 @@ model User {
   enrollments        Enrollment[]
   teaches            Course[]           @relation("TeacherCourses")
   pushSubscriptions  PushSubscription[]
+  attendances        Attendance[]
+  grades             Grade[]
 }
 
 enum Role {
@@ -53,6 +55,8 @@ model Course {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   enrollments    Enrollment[]
+  attendances    Attendance[]
+  grades         Grade[]
 }
 
 model Enrollment {
@@ -73,6 +77,30 @@ model SystemEvent {
   type        String   @default("INFO") // INFO, WARNING, SUCCESS
   date        DateTime @default(now())
   createdAt   DateTime @default(now())
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  date      DateTime @default(now())
+  status    String   @default("PRESENT") // PRESENT, ABSENT, LATE
+  createdAt DateTime @default(now())
+}
+
+model Grade {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id])
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  value     Float
+  title     String
+  comments  String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 model PushSubscription {

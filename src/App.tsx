@@ -23,12 +23,16 @@ import LandingView from './views/LandingView.js';
 import LoginView from './views/LoginView.js';
 import UsersView from './views/UsersView.js';
 import AIAssistantView from './views/AIAssistantView.js';
+import AttendanceView from './views/AttendanceView.js';
+import GradesView from './views/GradesView.js';
+import QRAttendanceView from './views/QRAttendanceView.js';
 import { subscribeToNotifications } from './pwa.js';
 
 export default function App() {
   const [view, setView] = useState('landing');
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isDark, setIsDark] = useState(false);
   const [stats, setStats] = useState({ students: 0, teachers: 0, courses: 0 });
   const [courses, setCourses] = useState<any[]>([]);
   const [googleCourses, setGoogleCourses] = useState<any[]>([]);
@@ -119,6 +123,12 @@ export default function App() {
         return <UsersView role="TEACHER" />;
       case 'ai-assistant':
         return <AIAssistantView />;
+      case 'attendance':
+        return <AttendanceView />;
+      case 'grades':
+        return <GradesView />;
+      case 'qr-attendance':
+        return <QRAttendanceView />;
       default:
         return (
           <div className="flex flex-col items-center justify-center h-[60vh] text-slate-300">
@@ -167,6 +177,9 @@ export default function App() {
           <NavItem icon={FolderOpen} label="Cursos" active={activeTab === 'courses'} onClick={() => setActiveTab('courses')} />
           <NavItem icon={Sparkles} label="Aurum AI" active={activeTab === 'ai-assistant'} onClick={() => setActiveTab('ai-assistant')} />
           <NavItem icon={MonitorPlay} label="Classroom" active={activeTab === 'google-class'} onClick={() => setActiveTab('google-class')} />
+          <NavItem icon={Users} label="Asistencia" active={activeTab === 'attendance'} onClick={() => setActiveTab('attendance')} />
+          <NavItem icon={QrCode} label="Asistencia QR" active={activeTab === 'qr-attendance'} onClick={() => setActiveTab('qr-attendance')} />
+          <NavItem icon={ClipboardList} label="Calificaciones" active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} />
           <NavItem icon={CreditCard} label="Pagos y Becas" active={activeTab === 'payments'} onClick={() => setActiveTab('payments')} />
           <NavItem icon={MessageSquare} label="Mensajes" active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} badge="3" />
           <NavItem icon={Settings} label="Configuración" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />

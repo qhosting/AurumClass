@@ -10,6 +10,7 @@ import { redis } from './src/lib/redis.js';
 import { comparePassword, generateToken, verifyToken } from './src/lib/auth.js';
 import { getAuthUrl, oauth2Client, listClassroomCourses } from './src/lib/google.js';
 import { generatePedagogicalContent } from './src/lib/gemini.js';
+import { sendWhatsAppMessage } from './src/lib/whatsapp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -298,6 +299,78 @@ async function startServer() {
 
   app.get('/api/notifications/key', (req, res) => {
     res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+  });
+
+  app.get('/api/courses/:id/students', async (req, res) => {
+    try {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { courseId: req.params.id },
+        include: { student: true }
+      });
+      res.json(enrollments.map(e => e.student));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch students' });
+    }
+  });
+
+  app.post('/api/attendance', async (req, res) => {
+    const { courseId, date, records } = req.body;
+    try {
+      const results = await Promise.all(records.map((record: any) => 
+        prisma.attendance.create({
+          data: {
+            userId: record.userId,
+            courseId,
+            date: new Date(date),
+            status: record.status
+          },
+          include: { user: true }
+        })
+      ));
+
+      // Optional: Send WhatsApp notification for absences
+      results.filter(r => r.status === 'ABSENT').forEach(r => {
+        // En un escenario real, usaríamos un campo r.user.phone
+        // sendWhatsAppMessage('numero', `Aviso: El alumno ${r.user.name} tiene una falta.`);
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save attendance' });
+    }
+  });
+
+  app.get('/api/courses/:id/grades', async (req, res) => {
+    try {
+      const grades = await prisma.grade.findMany({
+        where: { courseId: req.params.id },
+        include: { student: true },
+        orderBy: { date: 'desc' }
+      });
+      res.json(grades);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch grades' });
+    }
+  });
+
+  app.post('/api/grades', async (req, res) => {
+    const { studentId, courseId, value, title, comments } = req.body;
+    try {
+      const grade = await prisma.grade.create({
+        data: { studentId, courseId, value, title, comments },
+        include: { student: true }
+      });
+
+      // AI: Analysis of grade (Item 3: Proactive AI)
+      if (value < 6) {
+        // Enviar alerta a padres vía WhatsApp
+        // sendWhatsAppMessage('...', `Alerta: El alumno ${grade.student.name} obtuvo ${value} en ${title}.`);
+      }
+
+      res.json(grade);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create grade' });
+    }
   });
 
   if (process.env.NODE_ENV !== 'production') {
