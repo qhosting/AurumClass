@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   FolderOpen, 
@@ -19,16 +19,106 @@ import {
   BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import LandingView from './views/LandingView.js';
+import LoginView from './views/LoginView.js';
+import UsersView from './views/UsersView.js';
+import AIAssistantView from './views/AIAssistantView.js';
+import { subscribeToNotifications } from './pwa.js';
 
 export default function App() {
+  const [view, setView] = useState('landing');
+  const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [stats, setStats] = useState({ students: 0, teachers: 0, courses: 0 });
+  const [courses, setCourses] = useState<any[]>([]);
+  const [googleCourses, setGoogleCourses] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+
+  useEffect(() => {
+    // Check for existing session
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setUser(data.user);
+          setView('app');
+          subscribeToNotifications();
+        }
+      })
+      .catch(() => {});
+
+    // Check for OAuth2 success redirect
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('login') === 'success') {
+      // Small delay to ensure cookies are set/processed
+      setTimeout(() => {
+        fetch('/api/auth/me')
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setUser(data.user);
+              setView('app');
+              subscribeToNotifications();
+              // Clean URL
+              window.history.replaceState({}, document.title, "/");
+            }
+          });
+      }, 500);
+    }
+
+    fetch('/api/dashboard/stats')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error('Error fetching stats:', err));
+
+    fetch('/api/courses')
+      .then(res => res.json())
+      .then(data => setCourses(data))
+      .catch(err => console.error('Error fetching local courses:', err));
+
+    fetch('/api/events')
+      .then(res => res.json())
+      .then(data => setEvents(data))
+      .catch(err => console.error('Error fetching events:', err));
+  }, []);
+
+  const fetchGoogleCourses = () => {
+    setLoadingGoogle(true);
+    fetch('/api/google/courses')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setGoogleCourses(data);
+      })
+      .catch(err => console.error('Error fetching Google courses:', err))
+      .finally(() => setLoadingGoogle(false));
+  };
+
+  useEffect(() => {
+    if (activeTab === 'google-class' && googleCourses.length === 0) {
+      fetchGoogleCourses();
+    }
+  }, [activeTab]);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardMainView />;
+        return <DashboardMainView stats={stats} userName={user?.name || 'Admin'} courses={courses} events={events} />;
       case 'google-class':
-        return <GoogleClassroomView />;
+        return (
+          <GoogleClassroomView 
+            courses={googleCourses} 
+            loading={loadingGoogle} 
+            onRefresh={fetchGoogleCourses} 
+            isLinked={!!user?.googleRefreshToken}
+          />
+        );
+      case 'students':
+        return <UsersView role="STUDENT" />;
+      case 'teachers':
+        return <UsersView role="TEACHER" />;
+      case 'ai-assistant':
+        return <AIAssistantView />;
       default:
         return (
           <div className="flex flex-col items-center justify-center h-[60vh] text-slate-300">
@@ -39,6 +129,22 @@ export default function App() {
         );
     }
   };
+
+  if (view === 'landing') {
+    return <LandingView onStart={() => setView('login')} />;
+  }
+
+  if (view === 'login') {
+    return (
+      <LoginView 
+        onLoginSuccess={(userData) => {
+          setUser(userData);
+          setView('app');
+        }} 
+        onBack={() => setView('landing')} 
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen w-full bg-[#F4F7FE] font-sans selection:bg-yellow-200">
@@ -58,8 +164,9 @@ export default function App() {
           <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <NavItem icon={FolderOpen} label="Académico" active={activeTab === 'academic'} onClick={() => setActiveTab('academic')} />
           <NavItem icon={Users} label="Estudiantes" active={activeTab === 'students'} onClick={() => setActiveTab('students')} />
-          <NavItem icon={GraduationCap} label="Profesores" active={activeTab === 'teachers'} onClick={() => setActiveTab('teachers')} />
-          <NavItem icon={MonitorPlay} label="Google Classroom" active={activeTab === 'google-class'} onClick={() => setActiveTab('google-class')} />
+          <NavItem icon={FolderOpen} label="Cursos" active={activeTab === 'courses'} onClick={() => setActiveTab('courses')} />
+          <NavItem icon={Sparkles} label="Aurum AI" active={activeTab === 'ai-assistant'} onClick={() => setActiveTab('ai-assistant')} />
+          <NavItem icon={MonitorPlay} label="Classroom" active={activeTab === 'google-class'} onClick={() => setActiveTab('google-class')} />
           <NavItem icon={CreditCard} label="Pagos y Becas" active={activeTab === 'payments'} onClick={() => setActiveTab('payments')} />
           <NavItem icon={MessageSquare} label="Mensajes" active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} badge="3" />
           <NavItem icon={Settings} label="Configuración" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
@@ -70,10 +177,10 @@ export default function App() {
           <div className="absolute -top-4 -right-4 w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-slate-900 z-10">
             <HelpCircle size={20} />
           </div>
-          <h4 className="text-white font-bold text-lg mb-1">Help center</h4>
-          <p className="text-slate-400 text-xs mb-4 leading-relaxed">Have a problem? Send us a message!</p>
+          <h4 className="text-white font-bold text-lg mb-1">Centro de ayuda</h4>
+          <p className="text-slate-400 text-xs mb-4 leading-relaxed">¿Tienes algún problema? ¡Contáctanos!</p>
           <button className="w-full py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-yellow-400 transition-colors">
-            Go to help center
+            Ir al centro de ayuda
           </button>
         </div>
       </aside>
@@ -103,10 +210,10 @@ export default function App() {
 
         <div className="flex flex-col items-center text-center">
           <div className="w-24 h-24 rounded-full p-1 border-2 border-indigo-500 overflow-hidden mb-4 shadow-xl">
-             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" className="w-full h-full object-cover rounded-full" alt="" />
+             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'Admin'}`} className="w-full h-full object-cover rounded-full" alt="" />
           </div>
-          <h4 className="text-xl font-extrabold text-slate-800">AurumClass Admin</h4>
-          <p className="text-slate-400 text-xs mt-1">admin@aurumclass.pro</p>
+          <h4 className="text-xl font-extrabold text-slate-800">{user?.name || 'AurumClass Admin'}</h4>
+          <p className="text-slate-400 text-xs mt-1">{user?.email || 'admin@aurumclass.pro'}</p>
         </div>
 
         {/* Small Calendar Widget */}
@@ -160,14 +267,28 @@ export default function App() {
   );
 }
 
-function DashboardMainView() {
+function DashboardMainView({ stats, userName, courses }: any) {
   return (
     <>
       {/* Header Section */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-800">Hola, Admin 👋</h2>
+          <h2 className="text-2xl font-extrabold text-slate-800">Hola, {userName} 👋</h2>
           <p className="text-slate-400 text-sm mt-1">¡Vamos a gestionar el éxito académico hoy!</p>
+        </div>
+        <div className="flex items-center gap-6">
+           <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alumnos</span>
+              <span className="text-lg font-black text-indigo-900">{stats.students}</span>
+           </div>
+           <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Docentes</span>
+              <span className="text-lg font-black text-indigo-900">{stats.teachers}</span>
+           </div>
+           <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cursos</span>
+              <span className="text-lg font-black text-indigo-900">{stats.courses}</span>
+           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative flex items-center bg-white rounded-2xl px-4 py-2 border border-slate-100 shadow-sm w-80">
@@ -184,52 +305,51 @@ function DashboardMainView() {
         </div>
       </div>
 
-      {/* Courses Section as 'Cursos Destacados' */}
-      <section>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-slate-800">Cursos con Mayor Actividad</h3>
-          <div className="flex gap-6 text-sm font-bold">
-            <button className="text-slate-800 border-b-2 border-yellow-400 pb-1">Todos</button>
-            <button className="text-slate-400 hover:text-slate-600 transition-colors">Críticos</button>
-            <button className="text-blue-500 ml-4 font-bold">Ver reporte completo</button>
+      <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-extrabold text-slate-800">Cursos Recientes</h3>
+            <button className="text-indigo-900 font-bold text-sm hover:underline flex items-center gap-1">
+              Ver todo <ArrowRight size={14} />
+            </button>
           </div>
+          
+          {courses.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {courses.map((course: any) => (
+                <CourseCard 
+                  key={course.id}
+                  title={course.name}
+                  teacher={course.teacher?.name || 'Docente'}
+                  progress={0}
+                  students={0}
+                  accentColor="#4F46E5"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-20 bg-white rounded-[48px] border border-dashed border-slate-200">
+               <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-3xl flex items-center justify-center mb-4">
+                  <LayoutDashboard size={32} />
+               </div>
+               <p className="text-slate-400 font-bold">No hay cursos registrados aún.</p>
+            </div>
+          )}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <CourseCard 
-            title="Cálculo Diferencial" 
-            prof="Ing. Roberto S." 
-            level="Universidad • Ing. Sistemas" 
-            progress={88} 
-            color="yellow" 
-            stats={{ sessions: 24, videos: 12, files: 45 }}
-            image="https://api.dicebear.com/7.x/shapes/svg?seed=math"
-          />
-          <CourseCard 
-            title="Física I" 
-            prof="Lic. Marta Juarez" 
-            level="Bachillerato • 5to Año" 
-            progress={45} 
-            color="blue" 
-            stats={{ sessions: 20, videos: 8, files: 30 }}
-            image="https://api.dicebear.com/7.x/shapes/svg?seed=phys"
-          />
-          <CourseCard 
-            title="Hist. Universal" 
-            prof="Dr. Pedro Alva" 
-            level="Universidad • Humanidades" 
-            progress={100} 
-            color="green" 
-            stats={{ sessions: 18, videos: 15, files: 22 }}
-            image="https://api.dicebear.com/7.x/shapes/svg?seed=hist"
-          />
-        </div>
-      </section>
-
-      {/* Tasks as 'Eventos Institucionales' */}
-      <section>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-slate-800">Tareas del Sistema</h3>
+        <div>
+          <h3 className="text-xl font-extrabold text-slate-800 mb-8">Eventos Institucionales</h3>
+          <div className="space-y-6">
+            {events.map((event: any) => (
+              <ScheduleItem 
+                key={event.id}
+                time={new Date(event.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                title={event.title}
+                desc={event.description}
+                color={event.type === 'SUCCESS' ? '#ECFDF5' : '#F8FAFC'}
+              />
+            ))}
+          </div>
           <div className="flex gap-4 items-center">
             <button className="flex items-center gap-1 text-slate-400 text-sm font-bold">Hoy <ChevronDown size={14} /></button>
             <button className="text-yellow-600 text-sm font-bold">+ Nueva Alerta</button>
@@ -276,26 +396,44 @@ function DashboardMainView() {
   );
 }
 
-function GoogleClassroomView() {
+function GoogleClassroomView({ courses, loading, onRefresh, isLinked }: any) {
   return (
-    <div className="space-y-8 py-4">
-      <div>
-        <h2 className="text-3xl font-extrabold text-slate-800">Google Classroom</h2>
-        <p className="text-slate-400 text-sm mt-1">Sincronización centralizada pedagógica</p>
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-12">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900">Google Classroom</h2>
+          <p className="text-slate-400 text-sm mt-1">Sincronización en tiempo real con tus cursos de Google.</p>
+        </div>
+        {isLinked && (
+          <button 
+            onClick={onRefresh}
+            disabled={loading}
+            className="px-6 py-2.5 bg-indigo-900 text-white rounded-2xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-800 disabled:opacity-50 transition-all"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            Actualizar Sincronización
+          </button>
+        )}
       </div>
-      
-      <div className="bg-[#E9F2FF] border border-blue-100 rounded-[40px] p-10 flex items-center justify-between overflow-hidden relative">
-         <div className="max-w-md z-10">
-           <h3 className="text-2xl font-black text-indigo-900 leading-tight">Conecta tu Institución con Google Workspace</h3>
-           <p className="text-indigo-600/70 text-sm mt-4 font-medium italic">"Sincroniza notas, tareas y alumnos en un solo clic."</p>
-           <button className="mt-8 px-10 py-4 bg-indigo-900 text-white rounded-[20px] font-bold shadow-2xl shadow-indigo-200 hover:scale-105 transition-transform">
-             Vincular Dominio .edu
+
+      {!isLinked ? (
+        <div className="flex flex-col items-center justify-center p-20 bg-white rounded-[64px] shadow-2xl shadow-indigo-100 border border-slate-50 text-center">
+           <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[40px] flex items-center justify-center mb-8">
+              <MonitorPlay size={48} />
+           </div>
+           <h3 className="text-2xl font-black text-slate-900 mb-4">No has vinculado tu cuenta</h3>
+           <p className="text-slate-500 max-w-sm mb-10 font-medium">Vincula tu cuenta institucional de Google para acceder a tus cursos de Classroom directamente desde AurumClass.</p>
+           <button 
+              onClick={async () => {
+                const res = await fetch('/api/auth/google/url');
+                const { url } = await res.json();
+                window.location.href = url;
+              }}
+              className="px-10 py-5 bg-indigo-900 text-white rounded-3xl font-bold text-lg hover:scale-105 transition-transform flex items-center gap-3 shadow-2xl shadow-indigo-200"
+           >
+              <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="" />
+              Vincular Google Classroom
            </button>
-         </div>
-         <div className="absolute -right-20 opacity-10">
-           <MonitorPlay size={400} className="text-indigo-900" />
-         </div>
-         <div className="w-48 h-48 bg-white/40 rounded-full blur-3xl absolute -bottom-10 -left-10" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -347,44 +485,32 @@ function NavItem({ icon: Icon, label, active, onClick, badge }: any) {
   );
 }
 
-function CourseCard({ title, prof, level, progress, color, stats, image }: any) {
-  const accentColor = color === 'yellow' ? '#FFD600' : color === 'blue' ? '#3B82F6' : '#10B981';
-  
+function CourseCard({ title, teacher, progress, students, accentColor }: any) {
   return (
     <div className="bg-white rounded-[32px] p-6 border border-slate-100 custom-shadow hover:translate-y-[-4px] transition-all duration-300 group">
       <div className="flex items-center gap-4 mb-4">
         <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
-           <img src={image} alt="" className="w-full opacity-80" />
+           <LayoutDashboard className="text-slate-300" size={24} />
         </div>
         <div className="flex-1">
           <h4 className="font-bold text-slate-800 truncate">{title}</h4>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{prof}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{teacher}</p>
         </div>
         <button className="text-slate-300 hover:text-slate-600"><MoreVertical size={18} /></button>
       </div>
       
-      <p className={`text-xs font-bold mb-4 ${color === 'yellow' ? 'text-yellow-600' : color === 'blue' ? 'text-blue-600' : 'text-emerald-600'}`}>
-        {level}
-      </p>
-
       <div className="flex gap-4 mb-6">
         <div className="flex items-center gap-1.5 grayscale opacity-50">
-           <MonitorPlay size={14} /> <span className="text-[10px] font-black">{stats.videos}</span>
-        </div>
-        <div className="flex items-center gap-1.5 grayscale opacity-50">
-           <LayoutDashboard size={14} /> <span className="text-[10px] font-black">{stats.sessions}</span>
-        </div>
-        <div className="flex items-center gap-1.5 grayscale opacity-50">
-           <FolderOpen size={14} /> <span className="text-[10px] font-black">{stats.files}</span>
+           <Users size={14} /> <span className="text-[10px] font-black">{students} Alumnos</span>
         </div>
       </div>
 
       <div className="space-y-2">
         <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: accentColor }} />
+          <div className="h-full transition-all duration-500" style={{ width: `${progress || 0}%`, backgroundColor: accentColor }} />
         </div>
         <div className="flex justify-between items-center text-[10px] font-bold">
-           <span className="text-slate-400">Completed: <span className="text-slate-800">{progress}%</span></span>
+           <span className="text-slate-400">Progreso: <span className="text-slate-800">{progress || 0}%</span></span>
         </div>
       </div>
     </div>
